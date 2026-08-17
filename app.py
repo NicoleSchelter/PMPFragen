@@ -18,7 +18,7 @@ BANK = pathlib.Path(__file__).parent / "pmp_question_bank.json"
 RED, TEAL, INK, GREIGE = "#A51B34", "#0D5966", "#211F20", "#E8E5DE"
 
 TRADEMARK_NOTICE = (
-    "PMI, PMP, PMBOK und das PMI-Logo sind eingetragene Marken des Project Management Institute, Inc. Diese Übungssammlung ist ein eigenständiges Angebot von DB Training, Learning & Consulting und wird von PMI weder unterstützt noch geprüft, autorisiert oder zertifiziert. Die Fragen sind eigens für diesen Kurs formuliert und sind keine Originalfragen des PMI."
+    "PMI, PMP, PMBOK und das PMI-Logo sind eingetragene Marken des Project Management Institute, Inc. Diese Übungssammlung ist ein eigenständiges Angebot von Mielke PM Training & Coaching und wird von PMI weder unterstützt noch geprüft, autorisiert oder zertifiziert. Die Fragen sind eigens für diesen Kurs formuliert und sind keine Originalfragen des PMI. (C) Nicole Schelter"
 )
 
 
