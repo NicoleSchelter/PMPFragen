@@ -86,10 +86,7 @@ def svg(markup: str, height: int = 300):
     schmale Ansichten und iframe-Einbettung); components.html ist der Fallback
     für ältere Streamlit-Versionen."""
     block = f'<div style="background:#FBFAF7;padding:8px;border-radius:6px">{markup}</div>'
-    if hasattr(st, "html"):
-        st.html(block)
-    else:
-        components.html(block, height=height + 20)
+    components.html(block, height=height + 20)
 
 
 # ---------------------------------------------------------------- renderers
