@@ -9,7 +9,7 @@ noch geprüft, autorisiert oder zertifiziert.
 
 Start:  streamlit run app.py
 """
-import json, random, pathlib
+import json, random, pathlib, re
 import streamlit as st
 import streamlit.components.v1 as components
 
@@ -18,7 +18,7 @@ BANK = pathlib.Path(__file__).parent / "pmp_question_bank.json"
 RED, TEAL, INK, GREIGE = "#A51B34", "#0D5966", "#211F20", "#E8E5DE"
 
 TRADEMARK_NOTICE = (
-    "PMI, PMP, PMBOK und das PMI-Logo sind eingetragene Marken des Project Management Institute, Inc. Diese Übungssammlung ist ein eigenständiges Angebot von Mielke PM Training & Coaching und wird von PMI weder unterstützt noch geprüft, autorisiert oder zertifiziert. Die Fragen sind eigens für diesen Kurs formuliert und sind keine Originalfragen des PMI. (C) Nicole Schelter"
+    "PMI, PMP, PMBOK und das PMI-Logo sind eingetragene Marken des Project Management Institute, Inc. Diese Übungssammlung ist ein eigenständiges Angebot von Mielke PM Training & Coaching und wird von PMI weder unterstützt noch geprüft, autorisiert oder zertifiziert. Die Fragen sind eigens für diesen Kurs formuliert und sind keine Originalfragen des PMI. (C) Nicole SChelter"
 )
 
 
@@ -82,11 +82,40 @@ def load_bank():
 
 
 def svg(markup: str, height: int = 300):
-    """Rendert Inline-SVG. st.html skaliert mit der Spaltenbreite (gut für
-    schmale Ansichten und iframe-Einbettung); components.html ist der Fallback
-    für ältere Streamlit-Versionen."""
-    block = f'<div style="background:#FBFAF7;padding:8px;border-radius:6px">{markup}</div>'
-    components.html(block, height=height + 20)
+    """Rendert Inline-SVG in einem festen Rahmen.
+
+    Ohne explizite width/height am <svg>-Tag skaliert der Browser die Grafik
+    je nach verfügbarer Breite unterschiedlich hoch - dadurch konnte sie
+    höher werden als der Rahmen und wurde oben/unten abgeschnitten.
+
+    Fix: Wir lesen Breite/Höhe aus dem viewBox-Attribut aus, schreiben sie
+    explizit als width/height auf das <svg>-Tag (damit es IMMER in seiner
+    festen, nativen Pixelgröße rendert - unabhängig von der Spaltenbreite)
+    und setzen die Rahmenhöhe exakt danach. Ist die Grafik breiter als die
+    verfügbare Spalte, entsteht dadurch bewusst ein horizontaler
+    Scrollbalken statt eines abgeschnittenen Bildes.
+    """
+    m = re.search(r'viewBox="[-\d.]+\s+[-\d.]+\s+([\d.]+)\s+([\d.]+)"', markup)
+    if m:
+        vb_w, vb_h = float(m.group(1)), float(m.group(2))
+        sized_markup = re.sub(
+            r"^<svg\s", f'<svg width="{vb_w:g}" height="{vb_h:g}" ', markup, count=1
+        )
+        frame_height = int(vb_h) + 40
+    else:
+        sized_markup = markup
+        frame_height = height + 20
+
+    block = (
+        '<div style="overflow-x:auto; overflow-y:hidden; background:#FBFAF7; '
+        'padding:8px; border-radius:6px;">'
+        f"{sized_markup}"
+        "</div>"
+    )
+    if hasattr(st, "iframe"):
+        st.iframe(block, height=frame_height, width="stretch")
+    else:
+        components.html(block, height=frame_height, scrolling=False)
 
 
 # ---------------------------------------------------------------- renderers
@@ -303,6 +332,7 @@ def start_round(mod, sec, typ, only_interactive, shuffle, limit):
     st.session_state.idx = 0
     st.session_state.results = {}
     st.session_state.checked = {}
+    st.session_state.finished = False
 
 
 def filter_controls(box, prefix):
@@ -386,6 +416,7 @@ if "pool" not in st.session_state:
     st.stop()
 
 pool = st.session_state.pool
+st.session_state.setdefault("finished", False)
 if not pool:
     st.warning("Keine Fragen für diese Auswahl gefunden.")
     trademark_footer()
@@ -419,6 +450,17 @@ if b1.button("Antwort prüfen", key=f"check_{q['id']}", disabled=given is None):
     st.session_state.results[q["id"]] = ok
     st.session_state.checked[q["id"]] = (ok, lines)
 
+# Beim Nachschauen (nach "Beenden") automatisch bewerten, auch wenn die
+# Frage vorher nie explizit mit "Antwort prüfen" geprüft wurde.
+if (
+    st.session_state.finished
+    and q["id"] not in st.session_state.checked
+    and given is not None
+):
+    ok, lines = grade(q, given)
+    st.session_state.results[q["id"]] = ok
+    st.session_state.checked[q["id"]] = (ok, lines)
+
 if q["id"] in st.session_state.checked:
     ok, lines = st.session_state.checked[q["id"]]
     (st.success if ok else st.error)("Richtig!" if ok else "Nicht richtig.")
@@ -426,20 +468,36 @@ if q["id"] in st.session_state.checked:
         for ln in lines:
             st.markdown(ln)
         st.markdown(f"**Erläuterung:** {q['rationale']}")
+elif st.session_state.finished:
+    st.info("Diese Frage wurde nicht beantwortet.")
+
 
 def _go(delta: int):
     """Callback: läuft vor dem Skript-Rerun, daher ohne st.rerun()."""
     st.session_state.idx = max(0, min(len(pool) - 1, st.session_state.idx + delta))
 
 
-nav1, nav2, _ = st.columns([1, 1, 4])
+def _jump(i: int):
+    st.session_state.idx = i
+
+
+nav1, nav2, nav3 = st.columns([1, 1, 4])
 nav1.button("◀ Zurück", disabled=idx == 0, on_click=_go, args=(-1,))
 nav2.button("Weiter ▶", disabled=idx >= len(pool) - 1, on_click=_go, args=(1,))
+if not st.session_state.finished:
+    if nav3.button("🏁 Runde beenden & Ergebnis anzeigen", use_container_width=True):
+        st.session_state.finished = True
+        st.rerun()
 
-if done == len(pool):
+if st.session_state.finished or done == len(pool):
+    st.session_state.finished = True
     st.divider()
-    pct = round(100 * correct / len(pool))
+    pct = round(100 * correct / len(pool)) if pool else 0
     st.subheader(f"Runde abgeschlossen: {correct}/{len(pool)} richtig ({pct} %)")
+    unanswered = len(pool) - done
+    if unanswered:
+        st.caption(f"{unanswered} Frage(n) nicht beantwortet.")
+
     weak = {}
     for qq in pool:
         if not st.session_state.results.get(qq["id"], True):
@@ -449,5 +507,34 @@ if done == len(pool):
         st.markdown("**Schwerpunkte zum Nacharbeiten:**")
         for k, v in sorted(weak.items(), key=lambda x: -x[1]):
             st.markdown(f"- {k} — {v} Fehler")
+
+    st.markdown("**Fragenübersicht – anklicken, um Antwort und Begründung anzusehen:**")
+    n_cols = 3 if COMPACT else 6
+    cols = st.columns(n_cols)
+    for i, qq in enumerate(pool):
+        status = st.session_state.results.get(qq["id"])
+        if status is True:
+            icon = "✅"
+        elif status is False:
+            icon = "❌"
+        else:
+            icon = "⚪"
+        label = f"{icon} Frage {i + 1}"
+        col = cols[i % n_cols]
+        col.button(
+            label,
+            key=f"jump_{qq['id']}",
+            on_click=_jump,
+            args=(i,),
+            use_container_width=True,
+            type="primary" if i == idx else "secondary",
+        )
+
+    if st.button("🔄 Neue Runde mit gleicher Auswahl starten"):
+        st.session_state.idx = 0
+        st.session_state.results = {}
+        st.session_state.checked = {}
+        st.session_state.finished = False
+        st.rerun()
 
 trademark_footer()
