@@ -305,6 +305,24 @@ def grade(q, given):
     return False, ["Bewertung für diesen Typ nicht implementiert."]
 
 
+# --------------------------------------------------------- lazy re-grading
+def finalize_grading(pool):
+    """Bewertet beim Beenden ALLE Fragen der Runde, nicht nur die, die
+    man gerade ansieht. Nutzt given_store (siehe unten) statt Streamlits
+    Widget-Session-State: Streamlit loescht den Wert eines Widgets naemlich
+    automatisch, sobald es in einem Durchlauf nicht mehr angezeigt wird -
+    ein einfaches Nachschauen im Session-State reicht daher NICHT."""
+    store = st.session_state.get("given_store", {})
+    for qq in pool:
+        if qq["id"] in st.session_state.checked:
+            continue
+        g = store.get(qq["id"])
+        if g is not None:
+            ok, lines = grade(qq, g)
+            st.session_state.results[qq["id"]] = ok
+            st.session_state.checked[qq["id"]] = (ok, lines)
+
+
 # ---------------------------------------------------------------- app
 bank = load_bank()
 questions = bank["questions"]
@@ -333,6 +351,7 @@ def start_round(mod, sec, typ, only_interactive, shuffle, limit):
     st.session_state.results = {}
     st.session_state.checked = {}
     st.session_state.finished = False
+    st.session_state.given_store = {}
 
 
 def filter_controls(box, prefix):
@@ -444,6 +463,14 @@ st.subheader(q["prompt"])
 key = f"q_{q['id']}"
 given = render(q, key)
 
+# Jede gegebene Antwort sofort dauerhaft sichern (nicht nur im
+# Widget-Session-State, das Streamlit beim Wegnavigieren wieder löscht).
+# So bleibt die Antwort auch dann bekannt, wenn die Frage nie einzeln
+# über "Antwort prüfen" geprüft wurde.
+st.session_state.setdefault("given_store", {})
+if given is not None:
+    st.session_state.given_store[q["id"]] = given
+
 b1, b2, b3 = st.columns([1, 1, 4])
 if b1.button("Antwort prüfen", key=f"check_{q['id']}", disabled=given is None):
     ok, lines = grade(q, given)
@@ -491,6 +518,9 @@ if not st.session_state.finished:
 
 if st.session_state.finished or done == len(pool):
     st.session_state.finished = True
+    finalize_grading(pool)
+    done = len(st.session_state.results)
+    correct = sum(1 for v in st.session_state.results.values() if v)
     st.divider()
     pct = round(100 * correct / len(pool)) if pool else 0
     st.subheader(f"Runde abgeschlossen: {correct}/{len(pool)} richtig ({pct} %)")

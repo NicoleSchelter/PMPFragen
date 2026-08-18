@@ -176,6 +176,6 @@ erfolgt – dieser steht in der App in der Seitenleiste und in der Fußzeile.
 
 PMI, PMP, PMBOK und das PMI-Logo sind eingetragene Marken des Project Management
 Institute, Inc. Diese Übungssammlung ist ein eigenständiges Angebot von
-DB Training, Learning & Consulting und wird von PMI weder unterstützt noch
+Mielke PM Training & Coaching und wird von PMI weder unterstützt noch
 geprüft, autorisiert oder zertifiziert. Die Fragen sind eigens für diesen Kurs
-formuliert und sind **keine Originalfragen des PMI**.
+formuliert und sind **keine Originalfragen des PMI**, (c)Nicole Schelter.
